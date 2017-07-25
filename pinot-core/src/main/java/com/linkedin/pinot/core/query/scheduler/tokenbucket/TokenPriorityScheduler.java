@@ -28,7 +28,9 @@ import javax.annotation.Nonnull;
 import org.apache.commons.configuration.Configuration;
 
 /**
- * Schedules queries from a SchedulerGroup with highest number of tokens on priority
+ * Schedules queries from a {@link SchedulerGroup} with highest number of tokens on priority.
+ * This is a thin wrapper factory class that configures {@link PriorityScheduler} with
+ * the right concrete classes. All the priority based scheduling logic is in {@link PriorityScheduler}
  */
 public class TokenPriorityScheduler extends PriorityScheduler {
   public static final String TOKENS_PER_MS_KEY = "tokens_per_ms";

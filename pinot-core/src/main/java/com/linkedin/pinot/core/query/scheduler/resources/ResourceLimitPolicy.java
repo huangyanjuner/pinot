@@ -24,17 +24,17 @@ import org.slf4j.LoggerFactory;
 /**
  * Helper class to read configured resource limit policy
  */
-class ResourceLimitPolicy {
+public class ResourceLimitPolicy {
   private static final Logger LOGGER = LoggerFactory.getLogger(ResourceLimitPolicy.class);
 
-  static final int MAX_THREAD_LIMIT = Math.max(1, Runtime.getRuntime().availableProcessors() / 3);
+  static final int MAX_THREAD_LIMIT = Math.max(1, Runtime.getRuntime().availableProcessors());
   // The values for max threads count and pct below are educated guesses
-  static final String THREADS_PER_QUERY_PCT = "threads_per_query_pct";
-  static final int DEFAULT_THREADS_PER_QUERY_PCT = 20;
-  static final String TABLE_THREADS_SOFT_LIMIT = "table_threads_soft_limit_pct";
-  static final String TABLE_THREADS_HARD_LIMIT = "table_threads_hard_limit_pct";
-  static final int DEFAULT_TABLE_THREADS_SOFT_LIMIT = 30;
-  static final int DEFAULT_TABLE_THREADS_HARD_LIMIT = 45;
+  public static final String THREADS_PER_QUERY_PCT = "threads_per_query_pct";
+  public static final int DEFAULT_THREADS_PER_QUERY_PCT = 20;
+  public static final String TABLE_THREADS_SOFT_LIMIT = "table_threads_soft_limit_pct";
+  public static final String TABLE_THREADS_HARD_LIMIT = "table_threads_hard_limit_pct";
+  public static final int DEFAULT_TABLE_THREADS_SOFT_LIMIT = 30;
+  public static final int DEFAULT_TABLE_THREADS_HARD_LIMIT = 45;
 
   private final int maxThreadsPerQuery;
   private final int tableThreadsSoftLimit;

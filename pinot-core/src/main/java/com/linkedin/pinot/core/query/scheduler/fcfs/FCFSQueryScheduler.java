@@ -34,8 +34,6 @@ import org.apache.commons.configuration.Configuration;
  * First Come First Served(FCFS) query scheduler. The FCFS policy applies across all tables.
  * This implementation does not throttle resource utilization. That makes it unsafe in
  * the multi-tenant clusters.
- *
- * This is similar to the existing query scheduling logic.
  */
 public class FCFSQueryScheduler extends QueryScheduler {
 

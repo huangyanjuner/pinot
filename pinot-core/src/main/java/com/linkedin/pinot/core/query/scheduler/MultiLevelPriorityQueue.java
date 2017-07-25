@@ -16,6 +16,7 @@
 
 package com.linkedin.pinot.core.query.scheduler;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.common.query.ServerQueryRequest;
 import com.linkedin.pinot.core.query.scheduler.resources.ResourceManager;
@@ -44,9 +45,9 @@ import org.slf4j.LoggerFactory;
 public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
 
   private static Logger LOGGER = LoggerFactory.getLogger(MultiLevelPriorityQueue.class);
-  private static final String QUERY_DEADLINE_SECONDS_KEY = "query_deadline_seconds";
-  private static final String MAX_PENDING_PER_GROUP_KEY = "max_pending_per_group";
-  private static final String QUEUE_WAKEUP_MICROS = "queue_wakeup_micros";
+  public static final String QUERY_DEADLINE_SECONDS_KEY = "query_deadline_seconds";
+  public static final String MAX_PENDING_PER_GROUP_KEY = "max_pending_per_group";
+  public static final String QUEUE_WAKEUP_MICROS = "queue_wakeup_micros";
 
   private static final int DEFAULT_WAKEUP_MICROS = 1000;
 
@@ -99,18 +100,17 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
   }
 
   private void checkGroupHasCapacity(SchedulerGroup groupContext) throws OutOfCapacityError {
-    if (groupContext.numPending() < maxPendingPerGroup &&
-        groupContext.totalReservedThreads() < resourceManager.getTableThreadsHardLimit()) {
-      return;
+    if (groupContext.numPending() >= maxPendingPerGroup &&
+        groupContext.totalReservedThreads() >= resourceManager.getTableThreadsHardLimit()) {
+      throw new OutOfCapacityError(
+          String.format("SchedulerGroup %s is out of capacity. numPending: %d, maxPending: %d, reservedThreads: %d threadsHardLimit: %d",
+              groupContext.name(),
+              groupContext.numPending(), maxPendingPerGroup,
+              groupContext.totalReservedThreads(), resourceManager.getTableThreadsHardLimit()));
     }
-    throw new OutOfCapacityError(
-        String.format("SchedulerGroup %s is out of capacity. numPending: %d, maxPending: %d, reservedThreads: %d threadsHardLimit: %d",
-            groupContext.name(),
-            groupContext.numPending(), maxPendingPerGroup,
-            groupContext.totalReservedThreads(), resourceManager.getTableThreadsHardLimit()));
   }
 
-  public SchedulerGroup getOrCreateGroupContext(String groupName) {
+  private SchedulerGroup getOrCreateGroupContext(String groupName) {
     SchedulerGroup groupContext = schedulerGroups.get(groupName);
     if (groupContext == null) {
       groupContext = groupFactory.create(config, groupName);
@@ -151,10 +151,11 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
     for (Map.Entry<String, SchedulerGroup> groupInfoEntry : schedulerGroups.entrySet()) {
       SchedulerGroup group = groupInfoEntry.getValue();
       sb.append(group.toString());
+      group.trimExpired(deadlineEpochMillis);
       if (group.isEmpty() || !resourceManager.canSchedule(group)) {
         continue;
       }
-      group.trimExpired(deadlineEpochMillis);
+
       if (currentWinnerGroup == null) {
         currentWinnerGroup = group;
         continue;
@@ -199,6 +200,11 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
   // separate method to allow mocking for unit testing
   private long currentTimeMillis() {
     return System.currentTimeMillis();
+  }
+
+  @VisibleForTesting
+  long getWakeupTimeMicros() {
+    return wakeUpTimeMicros;
   }
 }
 

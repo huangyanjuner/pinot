@@ -43,11 +43,11 @@ public class UnboundedResourceManager extends ResourceManager {
 
   @Override
   public int getTableThreadsHardLimit() {
-    return numQueryWorkerThreads;
+    return numQueryRunnerThreads + numQueryWorkerThreads;
   }
 
   @Override
   public int getTableThreadsSoftLimit() {
-    return numQueryWorkerThreads;
+    return numQueryRunnerThreads + numQueryWorkerThreads;
   }
 }

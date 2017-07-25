@@ -15,133 +15,57 @@
  */
 package com.linkedin.pinot.core.query.scheduler.fcfs;
 
-import com.google.common.base.Preconditions;
+import com.linkedin.pinot.core.query.scheduler.AbstractSchedulerGroup;
 import com.linkedin.pinot.core.query.scheduler.SchedulerGroup;
 import com.linkedin.pinot.core.query.scheduler.SchedulerGroupAccountant;
 import com.linkedin.pinot.core.query.scheduler.SchedulerQueryContext;
-import java.util.Iterator;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 
 
-public class FCFSGroup implements SchedulerGroup {
-  private final String name;
-  // Queue of pending queries
-  private final ConcurrentLinkedQueue<SchedulerQueryContext> pendingQueries = new ConcurrentLinkedQueue<>();
-  private AtomicInteger numRunning = new AtomicInteger(0);
-  private AtomicInteger threadsInUse = new AtomicInteger(0);
-  private AtomicInteger reservedThreads = new AtomicInteger(0);
+public class FCFSGroup extends AbstractSchedulerGroup {
 
   public FCFSGroup(@Nonnull String group) {
-    Preconditions.checkNotNull(group);
-    this.name = group;
+    super(group);
   }
 
-  @Override
-  public String name() {
-    return name;
-  }
-
-  @Override
-  public void addLast(SchedulerQueryContext query) {
-    pendingQueries.add(query);
-  }
-
-  @Override
-  public SchedulerQueryContext peekFirst() {
-    return pendingQueries.peek();
-  }
-
-  @Override
-  public SchedulerQueryContext removeFirst() {
-    return pendingQueries.poll();
-  }
-
-  @Override
-  public void trimExpired(long deadlineMillis) {
-    Iterator<SchedulerQueryContext> iter = pendingQueries.iterator();
-    while (iter.hasNext()) {
-      SchedulerQueryContext next = iter.next();
-      if (next.getArrivalTimeMs() < deadlineMillis) {
-        iter.remove();
-      }
-    }
-  }
-
-  @Override
-  public boolean isEmpty() {
-    return pendingQueries.isEmpty();
-  }
-
-  @Override
-  public int numPending() {
-    return pendingQueries.size();
-  }
-
-  @Override
-  public int numRunning() {
-    return numRunning.get();
-  }
-
-  @Override
-  public void incrementThreads() {
-    threadsInUse.incrementAndGet();
-  }
-
-  @Override
-  public void decrementThreads() {
-    threadsInUse.decrementAndGet();
-  }
-
-  @Override
-  public int getThreadsInUse() {
-    return threadsInUse.get();
-  }
-
-  @Override
-  public void addReservedThreads(int threads) {
-    reservedThreads.addAndGet(threads);
-  }
-
-  @Override
-  public void releasedReservedThreads(int threads) {
-    reservedThreads.addAndGet(-1 * threads);
-  }
-
-  @Override
-  public int totalReservedThreads() {
-    return reservedThreads.get();
-  }
-
-  @Override
-  public void startQuery() {
-    incrementThreads();
-    numRunning.incrementAndGet();
-  }
-
-  @Override
-  public void endQuery() {
-    decrementThreads();
-    numRunning.decrementAndGet();
-  }
-
+  /**
+   * Group that has pending query with earlier arrival time has higher priority.
+   * @param rhs
+   * @return 1 if this has lower arrival time than rhs
+   *         -1 if this has higher arrival time than lhs
+   *         0 if arrival times are equal
+   */
   @Override
   public int compareTo(SchedulerGroupAccountant rhs) {
+    return compareTo(this, ((SchedulerGroup) rhs));
+  }
+
+  public static int compareTo(SchedulerGroup lhs, SchedulerGroup rhs) {
     if (rhs == null) {
       return 1;
     }
 
-    if (this == rhs) {
+    if (lhs == rhs) {
       return 0;
     }
-    long lhsArrivalMs = peekFirst().getArrivalTimeMs();
-    long rhsArrivalMs = ((FCFSGroup)rhs).peekFirst().getArrivalTimeMs();
-    if (lhsArrivalMs < rhsArrivalMs) {
-      return -1;
-    } else if (lhsArrivalMs > rhsArrivalMs) {
+
+    SchedulerQueryContext lhsFirst = lhs.peekFirst();
+    SchedulerQueryContext rhsFirst = rhs.peekFirst();
+    if (lhsFirst != null && rhsFirst != null) {
+      long lhsArrivalMs = lhsFirst.getArrivalTimeMs();
+      long rhsArrivalMs = rhsFirst.getArrivalTimeMs();
+      if (lhsArrivalMs < rhsArrivalMs) {
+        return 1;
+      } else if (lhsArrivalMs > rhsArrivalMs) {
+        return -1;
+      }
+      return 0;
+    } else if (lhsFirst != null && rhsFirst == null) {
       return 1;
+    } else if (lhsFirst == null && rhsFirst != null) {
+      return -1;
+    } else {
+      return 0;
     }
-    return 0;
   }
 }

@@ -24,8 +24,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * ResourceManager class to manage threadpools as per the configured
- * policy
+ * ResourceManager class to manage threadpools as per the configured policy
  */
 public class PolicyBasedResourceManager extends ResourceManager {
   private static final Logger LOGGER = LoggerFactory.getLogger(PolicyBasedResourceManager.class);

@@ -18,7 +18,7 @@ package com.linkedin.pinot.core.query.scheduler.resources;
 
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.core.query.scheduler.SchedulerGroupAccountant;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
@@ -38,12 +38,12 @@ import org.slf4j.LoggerFactory;
 public class BoundedAccountingExecutor extends QueryExecutorService {
   private static Logger LOGGER = LoggerFactory.getLogger(BoundedAccountingExecutor.class);
 
-  private final ExecutorService delegateExecutor;
+  private final Executor delegateExecutor;
   private final int bounds;
   private Semaphore semaphore;
   private final SchedulerGroupAccountant accountant;
 
-  public BoundedAccountingExecutor(@Nonnull ExecutorService s, int bounds,
+  public BoundedAccountingExecutor(@Nonnull Executor s, int bounds,
       @Nonnull SchedulerGroupAccountant accountant) {
     Preconditions.checkNotNull(s);
     Preconditions.checkNotNull(accountant);
@@ -75,6 +75,33 @@ public class BoundedAccountingExecutor extends QueryExecutorService {
     } catch (InterruptedException e) {
       LOGGER.error("Thread interrupted while waiting for semaphore", e);
       throw new RuntimeException(e);
+    }
+  }
+
+  private class QueryAccountingRunnable implements Runnable {
+    private final Runnable runnable;
+    private final Semaphore semaphore;
+    private final SchedulerGroupAccountant accountant;
+
+    QueryAccountingRunnable(Runnable r, Semaphore semaphore, SchedulerGroupAccountant accountant) {
+      this.runnable = r;
+      this.semaphore = semaphore;
+      this.accountant = accountant;
+    }
+
+    @Override
+    public void run() {
+      try {
+        if (accountant != null) {
+          accountant.incrementThreads();
+        }
+        runnable.run();
+      } finally {
+        if (accountant != null) {
+          accountant.decrementThreads();
+        }
+        semaphore.release();
+      }
     }
   }
 }

@@ -32,7 +32,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Per group FCFS algorithm with bounded resource management per group
+ * Per group FCFS algorithm with bounded resource management per {@link SchedulerGroup}
+ * This class is a thin wrapper factory that configures {@link PriorityScheduler} with right
+ * concrete classes. All the scheduling logic resides in {@link PriorityScheduler}
  */
 public class BoundedFCFS extends PriorityScheduler {
   private static Logger LOGGER = LoggerFactory.getLogger(BoundedFCFS.class);

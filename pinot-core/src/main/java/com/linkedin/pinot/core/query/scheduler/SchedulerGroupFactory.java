@@ -19,12 +19,12 @@ import org.apache.commons.configuration.Configuration;
 
 
 /**
- * Factory class to create scheduler groups
+ * Factory class to create {@link SchedulerGroup}
  */
 public interface SchedulerGroupFactory {
 
   /**
-   * Factory method to create scheduler group for given name
+   * Factory method to create {@link SchedulerGroup} for given name
    * @param config scheduler configuration
    * @param groupName Scheduler group name
    * @return instance of SchedulerGroup

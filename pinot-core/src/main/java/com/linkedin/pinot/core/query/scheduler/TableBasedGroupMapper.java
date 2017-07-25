@@ -22,7 +22,7 @@ package com.linkedin.pinot.core.query.scheduler;
 public class TableBasedGroupMapper implements SchedulerGroupMapper {
 
   /**
-   * Maps query to per-table SchedulerGroup
+   * Maps query to per-table {@link SchedulerGroup}
    * @param query
    * @return table name (per-table) SchedulerGroup
    */

@@ -16,6 +16,7 @@
 
 package com.linkedin.pinot.core.query.scheduler;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListenableFutureTask;
@@ -35,13 +36,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Schedules queries from a SchedulerGroup with highest number of tokens on priority
+ * Schedules queries from a {@link SchedulerGroup} with highest number of tokens on priority
  */
 public abstract class PriorityScheduler extends QueryScheduler {
   private static Logger LOGGER = LoggerFactory.getLogger(PriorityScheduler.class);
 
   private final SchedulerPriorityQueue queryQueue;
-  private final Semaphore runningQueriesSemaphore;
+  @VisibleForTesting
+  protected final Semaphore runningQueriesSemaphore;
 
   public PriorityScheduler(@Nonnull ResourceManager resourceManager, @Nonnull QueryExecutor queryExecutor,
       @Nonnull SchedulerPriorityQueue queue, @Nonnull ServerMetrics metrics) {
@@ -101,7 +103,6 @@ public abstract class PriorityScheduler extends QueryScheduler {
             request.getSchedulerGroup().startQuery();
             queryRequest.getTimerContext().getPhaseTimer(ServerQueryPhase.SCHEDULER_WAIT).stopAndRecord();
             resourceManager.getQueryRunners().submit(queryFutureTask);
-            MoreExecutors.directExecutor().execute(queryFutureTask);
           } catch (Throwable t){
             LOGGER.error("Error in scheduler thread. This is indicative of a bug. Please report this. Server will continue with errors", t);
           }
@@ -111,7 +112,7 @@ public abstract class PriorityScheduler extends QueryScheduler {
         }
       }
     });
-    scheduler.setName("ptb");
+    scheduler.setName("scheduler");
     scheduler.setPriority(Thread.MAX_PRIORITY);
     scheduler.start();
   }

@@ -1,14 +1,17 @@
 package com.linkedin.thirdeye.anomalydetection.alertFilterAutotune;
 
-import com.linkedin.thirdeye.datalayer.dto.AnomalyFeedbackDTO;
-import com.linkedin.thirdeye.datalayer.dto.AnomalyFunctionDTO;
-import com.linkedin.thirdeye.detector.email.filter.AlertFilterFactory;
-import com.linkedin.thirdeye.detector.function.AnomalyFunctionFactory;
-import com.linkedin.thirdeye.detector.function.BaseAnomalyFunction;
+import com.linkedin.thirdeye.anomaly.detection.lib.AutotuneMethodType;
+import com.linkedin.thirdeye.anomalydetection.performanceEvaluation.PerformanceEvaluate;
+import com.linkedin.thirdeye.anomalydetection.performanceEvaluation.PerformanceEvaluationMethod;
+import com.linkedin.thirdeye.datalayer.bao.AutotuneConfigManager;
+import com.linkedin.thirdeye.datalayer.dto.AutotuneConfigDTO;
+import com.linkedin.thirdeye.datalayer.dto.MergedAnomalyResultDTO;
+import com.linkedin.thirdeye.detector.email.filter.AlertFilter;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.commons.io.IOUtils;
@@ -19,6 +22,8 @@ import org.slf4j.LoggerFactory;
 public class AlertFilterAutotuneFactory {
   private static Logger LOGGER = LoggerFactory.getLogger(AlertFilterAutotuneFactory.class);
   private final Properties props;
+  private AutotuneConfigManager autotuneConfigDAO;
+  private AutotuneConfigDTO autotuneConfig;
 
   public AlertFilterAutotuneFactory(String autoTuneConfigPath) {
     props = new Properties();
@@ -51,18 +56,25 @@ public class AlertFilterAutotuneFactory {
     }
   }
 
-  public AlertFilterAutoTune fromSpec(String AutoTuneType) {
-    AlertFilterAutoTune alertFilterAutoTune = new DummyAlertFilterAutoTune();
+  public BaseAlertFilterAutoTune fromSpec(String AutoTuneType) {
+    BaseAlertFilterAutoTune alertFilterAutoTune = new DummyAlertFilterAutoTune();
     if (!props.containsKey(AutoTuneType)) {
       LOGGER.warn("AutoTune from Spec: Unsupported type " + AutoTuneType);
     } else{
       try {
         String className = props.getProperty(AutoTuneType);
-        alertFilterAutoTune = (AlertFilterAutoTune) Class.forName(className).newInstance();
+        alertFilterAutoTune = (BaseAlertFilterAutoTune) Class.forName(className).newInstance();
       } catch (Exception e) {
         LOGGER.warn("Failed to init AutoTune from Spec: {}", e.getMessage());
       }
     }
     return alertFilterAutoTune;
   }
+
+  public BaseAlertFilterAutoTune initAlertFilterAutoTune(AutotuneConfigDTO autotuneConfig, List<MergedAnomalyResultDTO> anomalies, AlertFilter alertFilter){
+    BaseAlertFilterAutoTune alertFilterAutoTune = fromSpec(autotuneConfig.getAutotuneMethod().toString());
+    alertFilterAutoTune.init(anomalies, alertFilter, autotuneConfig);
+    return alertFilterAutoTune;
+  }
+
 }

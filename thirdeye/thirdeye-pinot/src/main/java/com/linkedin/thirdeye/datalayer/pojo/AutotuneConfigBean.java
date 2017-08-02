@@ -35,6 +35,11 @@ public class AutotuneConfigBean extends AbstractBean {
   private String message;
   // the last update timestamp
   private long lastUpdateTimestamp;
+  // user defined pattern to be used each time when tuning alert filter
+  private String userDefinedPattern;
+
+  // constructor of AutotuneConfigBean
+
 
   public long getFunctionId() {
     return functionId;
@@ -132,6 +137,15 @@ public class AutotuneConfigBean extends AbstractBean {
     this.lastUpdateTimestamp = lastUpdateTimestamp;
   }
 
+  public void setUserDefinedPattern(String userDefinedPattern) {
+    this.userDefinedPattern = userDefinedPattern;
+  }
+
+  public String getUserDefinedPattern() {
+    return this.userDefinedPattern;
+  }
+
+
   @Override
   public boolean equals(Object o){
     if(!(o instanceof AutotuneConfigBean)){
@@ -143,12 +157,13 @@ public class AutotuneConfigBean extends AbstractBean {
         && Objects.equals(getConfiguration(), fac.getConfiguration()) && Objects.equals(getPerformance(), fac.getPerformance())
         && Objects.equals(getPerformanceEvaluationMethod(), fac.getPerformanceEvaluationMethod())
         && Objects.equals(getAvgRunningTime(), fac.getAvgRunningTime())
-        && Objects.equals(getOverallRunningTime(), fac.getOverallRunningTime());
+        && Objects.equals(getOverallRunningTime(), fac.getOverallRunningTime())
+        && Objects.equals(getUserDefinedPattern(), fac.getUserDefinedPattern());
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(getId(), functionId, startTime, endTime, autotuneMethod, performanceEvaluationMethod,
-        configuration, performance, avgRunningTime, overallRunningTime);
+        configuration, performance, avgRunningTime, overallRunningTime, userDefinedPattern);
   }
 }

@@ -19,7 +19,7 @@ package com.linkedin.pinot.core.query.scheduler;
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.common.metrics.ServerMetrics;
 import com.linkedin.pinot.common.query.QueryExecutor;
-import com.linkedin.pinot.core.query.scheduler.fcfs.BoundedFCFS;
+import com.linkedin.pinot.core.query.scheduler.fcfs.BoundedFCFSScheduler;
 import com.linkedin.pinot.core.query.scheduler.fcfs.FCFSQueryScheduler;
 import com.linkedin.pinot.core.query.scheduler.tokenbucket.TokenPriorityScheduler;
 import java.lang.reflect.Constructor;
@@ -61,7 +61,7 @@ public class QuerySchedulerFactory {
       LOGGER.info("Using Priority Token Bucket scheduler");
       return TokenPriorityScheduler.create(schedulerConfig, queryExecutor, serverMetrics);
     } else if (schedulerConfig.equals("bounded_fcfs")) {
-      return BoundedFCFS.create(schedulerConfig, queryExecutor, serverMetrics);
+      return BoundedFCFSScheduler.create(schedulerConfig, queryExecutor, serverMetrics);
     }
 
     // didn't find by name so try by classname

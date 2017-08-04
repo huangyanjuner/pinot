@@ -36,10 +36,10 @@ import org.slf4j.LoggerFactory;
  * This class is a thin wrapper factory that configures {@link PriorityScheduler} with right
  * concrete classes. All the scheduling logic resides in {@link PriorityScheduler}
  */
-public class BoundedFCFS extends PriorityScheduler {
-  private static Logger LOGGER = LoggerFactory.getLogger(BoundedFCFS.class);
+public class BoundedFCFSScheduler extends PriorityScheduler {
+  private static Logger LOGGER = LoggerFactory.getLogger(BoundedFCFSScheduler.class);
 
-  public static BoundedFCFS create(@Nonnull Configuration config, @Nonnull QueryExecutor queryExecutor,
+  public static BoundedFCFSScheduler create(@Nonnull Configuration config, @Nonnull QueryExecutor queryExecutor,
       @Nonnull ServerMetrics serverMetrics) {
     final ResourceManager rm = new PolicyBasedResourceManager(config);
     final SchedulerGroupFactory groupFactory = new SchedulerGroupFactory() {
@@ -49,16 +49,16 @@ public class BoundedFCFS extends PriorityScheduler {
       }
     };
     MultiLevelPriorityQueue queue = new MultiLevelPriorityQueue(config, rm, groupFactory, new TableBasedGroupMapper());
-    return new BoundedFCFS(rm , queryExecutor, queue, serverMetrics);
+    return new BoundedFCFSScheduler(rm , queryExecutor, queue, serverMetrics);
   }
 
-  private BoundedFCFS(@Nonnull ResourceManager resourceManager, @Nonnull QueryExecutor queryExecutor,
+  private BoundedFCFSScheduler(@Nonnull ResourceManager resourceManager, @Nonnull QueryExecutor queryExecutor,
       @Nonnull SchedulerPriorityQueue queue, @Nonnull ServerMetrics metrics) {
     super(resourceManager, queryExecutor, queue, metrics);
   }
 
   @Override
   public String name() {
-    return "BoundedFCFS";
+    return "BoundedFCFSScheduler";
   }
 }

@@ -29,6 +29,7 @@ import com.linkedin.pinot.common.query.QueryExecutor;
 import com.linkedin.pinot.common.query.ServerQueryRequest;
 import com.linkedin.pinot.common.query.context.TimerContext;
 import com.linkedin.pinot.common.request.InstanceRequest;
+import com.linkedin.pinot.common.response.ProcessingException;
 import com.linkedin.pinot.common.utils.DataTable;
 import com.linkedin.pinot.core.common.datatable.DataTableImplV2;
 import com.linkedin.pinot.core.query.scheduler.resources.QueryExecutorService;
@@ -96,7 +97,7 @@ public abstract class QueryScheduler {
    * stop the scheduler and shutdown services
    */
   public void stop() {
-    resourceManager.stop();
+    // don't stop resourcemanager yet...we need to wait for all running queries to finish
     isRunning = false;
   }
 
@@ -205,11 +206,12 @@ public abstract class QueryScheduler {
    * Error response future in case of internal error where query response is not available. This can happen
    * if the query can not be executed or
    * @param queryRequest
+   * @param error error code to send
    * @return
    */
-  protected ListenableFuture<byte[]> internalErrorResponse(ServerQueryRequest queryRequest) {
+  protected ListenableFuture<byte[]> immediateErrorResponse(ServerQueryRequest queryRequest, ProcessingException error) {
     DataTable result = new DataTableImplV2();
-    result.addException(QueryException.INTERNAL_ERROR);
+    result.addException(error);
     return Futures.immediateFuture(QueryScheduler.serializeDataTable(queryRequest, result));
   }
 }

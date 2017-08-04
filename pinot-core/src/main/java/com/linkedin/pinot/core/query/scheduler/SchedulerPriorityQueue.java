@@ -16,7 +16,10 @@
 
 package com.linkedin.pinot.core.query.scheduler;
 
+import java.util.List;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 
 /**
  * Interface for scheduler priority queue for priority based schedulers
@@ -36,7 +39,14 @@ public interface SchedulerPriorityQueue {
   /**
    * Blocking call to select the query with highest priority to schedule for execution next.
    * The returned query will be removed from internal queues.
-   * @return query to schedule
+   * @return query to schedule. Returns null only when interrupted
    */
-  @Nonnull SchedulerQueryContext take();
+  @Nullable SchedulerQueryContext take();
+
+  /**
+   * Get the list of all the pending queries in the queue
+   * @return Non-null list of all the pending queries in the queue
+   *         List is empty if there are no pending queries
+   */
+  @Nonnull List<SchedulerQueryContext> drain();
 }

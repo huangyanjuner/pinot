@@ -20,13 +20,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.common.query.ServerQueryRequest;
 import com.linkedin.pinot.core.query.scheduler.resources.ResourceManager;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.apache.commons.configuration.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,32 +102,12 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
     }
   }
 
-  private void checkGroupHasCapacity(SchedulerGroup groupContext) throws OutOfCapacityError {
-    if (groupContext.numPending() >= maxPendingPerGroup &&
-        groupContext.totalReservedThreads() >= resourceManager.getTableThreadsHardLimit()) {
-      throw new OutOfCapacityError(
-          String.format("SchedulerGroup %s is out of capacity. numPending: %d, maxPending: %d, reservedThreads: %d threadsHardLimit: %d",
-              groupContext.name(),
-              groupContext.numPending(), maxPendingPerGroup,
-              groupContext.totalReservedThreads(), resourceManager.getTableThreadsHardLimit()));
-    }
-  }
-
-  private SchedulerGroup getOrCreateGroupContext(String groupName) {
-    SchedulerGroup groupContext = schedulerGroups.get(groupName);
-    if (groupContext == null) {
-      groupContext = groupFactory.create(config, groupName);
-      schedulerGroups.put(groupName, groupContext);
-    }
-    return groupContext;
-  }
-
   /**
    * Blocking call to read the next query in order of priority
    * @return
    */
   @Override
-  public @Nonnull SchedulerQueryContext take() {
+  public @Nullable SchedulerQueryContext take() {
     queueLock.lock();
     try {
       while (true) {
@@ -133,7 +116,7 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
           try {
             queryReaderCondition.await(wakeUpTimeMicros, TimeUnit.MICROSECONDS);
           } catch (InterruptedException e) {
-            // continue
+            return null;
           }
         }
         return schedulerQueryContext;
@@ -141,6 +124,24 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
     } finally {
       queueLock.unlock();
     }
+  }
+
+  @Nonnull
+  @Override
+  public List<SchedulerQueryContext> drain() {
+    List<SchedulerQueryContext> pending = new ArrayList<>();
+    queueLock.lock();
+    try {
+      for (Map.Entry<String, SchedulerGroup> groupEntry : schedulerGroups.entrySet()) {
+        SchedulerGroup group = groupEntry.getValue();
+        while (!group.isEmpty()) {
+          pending.add(group.removeFirst());
+        }
+      }
+    } finally {
+      queueLock.unlock();
+    }
+    return pending;
   }
 
   private SchedulerQueryContext takeNextInternal() {
@@ -193,8 +194,28 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
           startTime));
       query = currentWinnerGroup.removeFirst();
     }
-    LOGGER.info(sb.toString());
+    LOGGER.debug(sb.toString());
     return query;
+  }
+
+  private void checkGroupHasCapacity(SchedulerGroup groupContext) throws OutOfCapacityError {
+    if (groupContext.numPending() >= maxPendingPerGroup &&
+        groupContext.totalReservedThreads() >= resourceManager.getTableThreadsHardLimit()) {
+      throw new OutOfCapacityError(
+          String.format("SchedulerGroup %s is out of capacity. numPending: %d, maxPending: %d, reservedThreads: %d threadsHardLimit: %d",
+              groupContext.name(),
+              groupContext.numPending(), maxPendingPerGroup,
+              groupContext.totalReservedThreads(), resourceManager.getTableThreadsHardLimit()));
+    }
+  }
+
+  private SchedulerGroup getOrCreateGroupContext(String groupName) {
+    SchedulerGroup groupContext = schedulerGroups.get(groupName);
+    if (groupContext == null) {
+      groupContext = groupFactory.create(config, groupName);
+      schedulerGroups.put(groupName, groupContext);
+    }
+    return groupContext;
   }
 
   // separate method to allow mocking for unit testing

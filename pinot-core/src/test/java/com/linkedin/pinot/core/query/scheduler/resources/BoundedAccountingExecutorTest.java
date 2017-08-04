@@ -20,11 +20,6 @@ public class BoundedAccountingExecutorTest {
     CyclicBarrier startupBarrier;
   }
 
-  /*@BeforeMethod
-  public void beforeMethod() {
-    running.set(0);
-  }*/
-
   // Created bounded executor with limit 3 and add 5 jobs. Only 3 can be running at a time
   @Test
   public void testBoundsWithinThreadCount() throws BrokenBarrierException, InterruptedException {

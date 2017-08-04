@@ -57,8 +57,41 @@ public class PrioritySchedulerTest {
   public void testStartStop() throws InterruptedException {
     TestPriorityScheduler scheduler = TestPriorityScheduler.create();
     scheduler.start();
+    // 100 is arbitrary.. we need to wait for scheduler thread to have completely started
     Thread.sleep(100);
     scheduler.stop();
+    long queueWakeTimeMicros = ((MultiLevelPriorityQueue) scheduler.getQueue()).getWakeupTimeMicros();
+    long sleepTimeMs = queueWakeTimeMicros >= 1000 ? queueWakeTimeMicros / 1000 + 10 : 10;
+    Thread.sleep(sleepTimeMs);
+    assertFalse(scheduler.scheduler.isAlive());
+  }
+
+  @Test
+  public void testStartStopQueries() throws ExecutionException, InterruptedException, IOException {
+    TestPriorityScheduler scheduler = TestPriorityScheduler.create();
+    scheduler.start();
+
+    PropertiesConfiguration conf = new PropertiesConfiguration();
+    conf.setProperty(ResourceLimitPolicy.TABLE_THREADS_HARD_LIMIT, 5);
+    conf.setProperty(MultiLevelPriorityQueue.MAX_PENDING_PER_GROUP_KEY, 5);
+    List<ListenableFuture<byte[]>> results = new ArrayList<>();
+    results.add(scheduler.submit(createServerQueryRequest("1", metrics)));
+    TestSchedulerGroup group = TestPriorityScheduler.groupFactory.groupMap.get("1");
+    group.addReservedThreads(10);
+    group.addLast(createQueryRequest("1", metrics));
+    results.add(scheduler.submit(createServerQueryRequest("1", metrics)));
+
+    scheduler.stop();
+     long queueWakeTimeMicros = ((MultiLevelPriorityQueue) scheduler.getQueue()).getWakeupTimeMicros();
+    long sleepTimeMs = queueWakeTimeMicros >= 1000 ? queueWakeTimeMicros / 1000 + 10 : 10;
+    Thread.sleep(sleepTimeMs);
+    int hasServerShuttingDownError = 0;
+    for (ListenableFuture<byte[]> result : results) {
+      DataTable table = DataTableFactory.getDataTable(result.get());
+      hasServerShuttingDownError += table.getMetadata().containsKey(
+          DataTable.EXCEPTION_METADATA_KEY + QueryException.SERVER_SCHEDULER_DOWN_ERROR.getErrorCode()) ? 1 : 0;
+    }
+    assertTrue(hasServerShuttingDownError > 0);
   }
 
   @Test
@@ -146,7 +179,7 @@ public class PrioritySchedulerTest {
     results.add(scheduler.submit(createServerQueryRequest("1", metrics)));
     DataTable dataTable = DataTableFactory.getDataTable(results.get(1).get());
     assertTrue(dataTable.getMetadata().containsKey(
-        DataTable.EXCEPTION_METADATA_KEY + QueryException.INTERNAL_ERROR.getErrorCode()));
+        DataTable.EXCEPTION_METADATA_KEY + QueryException.SERVER_OUT_OF_CAPACITY_ERROR.getErrorCode()));
     scheduler.stop();
   }
 
@@ -158,7 +191,7 @@ public class PrioritySchedulerTest {
     // start is not called
     DataTable response = DataTableFactory.getDataTable(result.get());
     assertTrue(response.getMetadata().containsKey(
-        DataTable.EXCEPTION_METADATA_KEY + QueryException.INTERNAL_ERROR.getErrorCode()));
+        DataTable.EXCEPTION_METADATA_KEY + QueryException.SERVER_SCHEDULER_DOWN_ERROR.getErrorCode()));
     assertFalse(response.getMetadata().containsKey("table"));
     scheduler.stop();
   }
@@ -199,6 +232,13 @@ public class PrioritySchedulerTest {
       return runningQueriesSemaphore;
     }
 
+    Thread getSchedulerThread() {
+      return scheduler;
+    }
+
+    SchedulerPriorityQueue getQueue() {
+      return queryQueue;
+    }
   }
 
   static class TestQueryExecutor implements QueryExecutor {

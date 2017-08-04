@@ -19,6 +19,7 @@ package com.linkedin.pinot.core.query.scheduler.fcfs;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListenableFutureTask;
+import com.linkedin.pinot.common.exception.QueryException;
 import com.linkedin.pinot.common.metrics.ServerMetrics;
 import com.linkedin.pinot.common.metrics.ServerQueryPhase;
 import com.linkedin.pinot.common.query.QueryExecutor;
@@ -47,7 +48,7 @@ public class FCFSQueryScheduler extends QueryScheduler {
   public ListenableFuture<byte[]> submit(final ServerQueryRequest queryRequest) {
     Preconditions.checkNotNull(queryRequest);
     if (! isRunning) {
-      return internalErrorResponse(queryRequest);
+      return immediateErrorResponse(queryRequest, QueryException.SERVER_SCHEDULER_DOWN_ERROR);
     }
     queryRequest.getTimerContext().startNewPhaseTimer(ServerQueryPhase.SCHEDULER_WAIT);
     QueryExecutorService queryExecutorService =

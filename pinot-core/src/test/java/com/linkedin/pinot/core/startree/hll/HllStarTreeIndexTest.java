@@ -15,49 +15,135 @@
  */
 package com.linkedin.pinot.core.startree.hll;
 
-import com.linkedin.pinot.common.data.Schema;
-import com.linkedin.pinot.core.indexsegment.IndexSegment;
+import com.clearspring.analytics.stream.cardinality.HyperLogLog;
+import com.linkedin.pinot.common.segment.ReadMode;
+import com.linkedin.pinot.core.common.BlockDocIdIterator;
+import com.linkedin.pinot.core.common.Constants;
+import com.linkedin.pinot.core.common.Operator;
+import com.linkedin.pinot.core.indexsegment.columnar.ColumnarSegmentLoader;
+import com.linkedin.pinot.core.startree.BaseStarTreeIndexTest;
 import com.linkedin.pinot.core.startree.StarTreeIndexTestSegmentHelper;
-import org.apache.commons.io.FileUtils;
-import org.testng.annotations.AfterSuite;
-import org.testng.annotations.BeforeSuite;
-import org.testng.annotations.Test;
-
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.apache.commons.io.FileUtils;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.AfterSuite;
+import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeSuite;
+import org.testng.annotations.BeforeTest;
+import org.testng.annotations.Test;
 
 /**
- * This test generates a Star-Tree segment with random data, and ensures that
- * aggregation results computed using star-tree index operator are the same as
- * aggregation results computed by scanning raw docs.
+ * This test generates a Star-Tree segment with random data and HLL derived columns, and ensures that FASTHLL results
+ * computed using star-tree index operator are the same as the results computed by scanning raw docs.
  */
-public class HllStarTreeIndexTest extends BaseHllStarTreeIndexTest {
-
+public class HllStarTreeIndexTest extends BaseStarTreeIndexTest {
+  private static final String DATA_DIR = System.getProperty("java.io.tmpdir") + File.separator + "HllStarTreeIndexTest";
   private static final String SEGMENT_NAME = "starTreeSegment";
-  private static final String SEGMENT_DIR_NAME = "/tmp/star-tree-index";
 
-  private IndexSegment _segment;
-  private Schema _schema;
+  // Test on column 'd3' and 'd4' because they have higher cardinality than other dimensions
+  private static final Set<String> COLUMNS_TO_DERIVE_HLL_FIELDS = new HashSet<>(Arrays.asList("d3", "d4"));
+  private static final List<String> HLL_METRIC_COLUMNS =
+      Arrays.asList("d3" + HllConstants.DEFAULT_HLL_DERIVE_COLUMN_SUFFIX,
+          "d4" + HllConstants.DEFAULT_HLL_DERIVE_COLUMN_SUFFIX);
+  protected static final HllConfig HLL_CONFIG = new HllConfig(HllConstants.DEFAULT_LOG2M, COLUMNS_TO_DERIVE_HLL_FIELDS,
+      HllConstants.DEFAULT_HLL_DERIVE_COLUMN_SUFFIX);
 
-  @BeforeSuite
+  private static final String[] HARD_CODED_QUERIES = new String[]{
+      "SELECT FASTHLL(d3) FROM T",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 = 'd1-v1'",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 <> 'd1-v1'",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 BETWEEN 'd1-v1' AND 'd1-v3'",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 IN ('d1-v1', 'd1-v2')",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 IN ('d1-v1', 'd1-v2') AND d2 NOT IN ('d2-v1')",
+      "SELECT FASTHLL(d3) FROM T GROUP BY d1",
+      "SELECT FASTHLL(d3) FROM T GROUP BY d1, d2",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 = 'd1-v2' GROUP BY d1",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 BETWEEN 'd1-v1' AND 'd1-v3' GROUP BY d2",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 = 'd1-v2' GROUP BY d2, d3",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 <> 'd1-v1' GROUP BY d2",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 IN ('d1-v1', 'd1-v2') GROUP BY d2",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 IN ('d1-v1', 'd1-v2') AND d2 NOT IN ('d2-v1') GROUP BY d3",
+      "SELECT FASTHLL(d3) FROM T WHERE d1 IN ('d1-v1', 'd1-v2') AND d2 NOT IN ('d2-v1') GROUP BY d3, d4"
+  };
+
+  @Override
+  protected String[] getHardCodedQueries() {
+    return HARD_CODED_QUERIES;
+  }
+
+  @Override
+  protected List<String> getMetricColumns() {
+    return HLL_METRIC_COLUMNS;
+  }
+
+  @Override
+  protected Map<List<Integer>, List<Double>> compute(Operator filterOperator) throws Exception {
+    filterOperator.open();
+    BlockDocIdIterator docIdIterator = filterOperator.nextBlock().getBlockDocIdSet().iterator();
+
+    Map<List<Integer>, List<HyperLogLog>> intermediateResult = new HashMap<>();
+    int docId;
+    while ((docId = docIdIterator.next()) != Constants.EOF) {
+      // Array of dictionary Ids (zero-length array for non-group-by query)
+      List<Integer> groupKey = new ArrayList<>(_numGroupByColumns);
+      for (int i = 0; i < _numGroupByColumns; i++) {
+        _groupByValIterators[i].skipTo(docId);
+        groupKey.add(_groupByValIterators[i].nextIntVal());
+      }
+
+      List<HyperLogLog> hyperLogLogs = intermediateResult.get(groupKey);
+      if (hyperLogLogs == null) {
+        hyperLogLogs = new ArrayList<>(_numMetricColumns);
+        for (int i = 0; i < _numMetricColumns; i++) {
+          hyperLogLogs.add(new HyperLogLog(HLL_CONFIG.getHllLog2m()));
+        }
+        intermediateResult.put(groupKey, hyperLogLogs);
+      }
+      for (int i = 0; i < _numMetricColumns; i++) {
+        _metricValIterators[i].skipTo(docId);
+        int dictId = _metricValIterators[i].nextIntVal();
+        HyperLogLog hyperLogLog = hyperLogLogs.get(i);
+        hyperLogLog.addAll(HllUtil.convertStringToHll(_metricDictionaries[i].getStringValue(dictId)));
+        hyperLogLogs.set(i, hyperLogLog);
+      }
+    }
+    filterOperator.close();
+
+    // Compute the final result
+    Map<List<Integer>, List<Double>> finalResult = new HashMap<>();
+    for (Map.Entry<List<Integer>, List<HyperLogLog>> entry : intermediateResult.entrySet()) {
+      List<HyperLogLog> hyperLogLogs = entry.getValue();
+      List<Double> finalResultForGroup = new ArrayList<>();
+      for (HyperLogLog hyperLogLog : hyperLogLogs) {
+        finalResultForGroup.add((double) hyperLogLog.cardinality());
+      }
+      finalResult.put(entry.getKey(), finalResultForGroup);
+    }
+
+    return finalResult;
+  }
+
+  @BeforeClass
   void setup() throws Exception {
-    _schema = StarTreeIndexTestSegmentHelper.buildSegmentWithHll(SEGMENT_DIR_NAME, SEGMENT_NAME, HLL_CONFIG);
-    _segment = StarTreeIndexTestSegmentHelper.loadSegment(SEGMENT_DIR_NAME, SEGMENT_NAME);
+    StarTreeIndexTestSegmentHelper.buildSegmentWithHll(DATA_DIR, SEGMENT_NAME, HLL_CONFIG);
+    _segment = ColumnarSegmentLoader.load(new File(DATA_DIR, SEGMENT_NAME), ReadMode.mmap);
   }
 
-  @AfterSuite
-  void tearDown() throws IOException {
-    FileUtils.deleteDirectory(new File(SEGMENT_DIR_NAME));
-  }
-
-  /**
-   * This test ensures that the aggregation result computed using the star-tree index operator
-   * is the same as computed by scanning raw-docs, for a hard-coded set of queries.
-   *
-   * @throws Exception
-   */
   @Test
   public void test() throws Exception {
-    testHardCodedQueries(_segment, _schema);
+    testHardCodedQueries();
+  }
+
+  @AfterClass
+  void tearDown() {
+    FileUtils.deleteQuietly(new File(DATA_DIR));
   }
 }

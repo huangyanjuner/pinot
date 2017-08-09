@@ -15,29 +15,33 @@
  */
 package com.linkedin.pinot.core.query.aggregation.groupby;
 
+import com.google.common.base.Preconditions;
 import com.linkedin.pinot.common.response.broker.GroupByResult;
-import com.linkedin.pinot.core.query.aggregation.AggregationFunctionContext;
 import com.linkedin.pinot.core.query.aggregation.function.AggregationFunction;
 import com.linkedin.pinot.core.query.aggregation.function.AggregationFunctionFactory;
 import com.linkedin.pinot.core.query.aggregation.function.AggregationFunctionUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.TreeMap;
 import javax.annotation.Nonnull;
+import org.apache.commons.collections.comparators.ComparableComparator;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 
 
 /**
  * The <code>AggregationGroupByTrimmingService</code> class provides trimming service for aggregation group-by query.
  */
-// TODO: revisit the trim algorithm, implement trim on all Object but not only for Comparable.
 public class AggregationGroupByTrimmingService {
   public static final String GROUP_KEY_DELIMITER = "\t";
 
+  private final AggregationFunction[] _aggregationFunctions;
   private final int _numAggregationFunctions;
   private final boolean[] _minOrders;
 
@@ -47,23 +51,10 @@ public class AggregationGroupByTrimmingService {
   // To trigger the trimming, number of groups should be larger than _trimThreshold which is (_trimSize * 4).
   private final int _trimThreshold;
 
-  public AggregationGroupByTrimmingService(@Nonnull AggregationFunctionContext[] aggregationFunctionContexts,
-      int groupByTopN) {
-    _numAggregationFunctions = aggregationFunctionContexts.length;
-    _minOrders = new boolean[_numAggregationFunctions];
-    for (int i = 0; i < _numAggregationFunctions; i++) {
-      String aggregationFunctionName = aggregationFunctionContexts[i].getAggregationFunction().getName();
-      if (aggregationFunctionName.equals(AggregationFunctionFactory.AggregationFunctionType.MIN.getName())
-          || aggregationFunctionName.equals(AggregationFunctionFactory.AggregationFunctionType.MINMV.getName())) {
-        _minOrders[i] = true;
-      }
-    }
-    _groupByTopN = groupByTopN;
-    _trimSize = Math.max(_groupByTopN * 5, 5000);
-    _trimThreshold = _trimSize * 4;
-  }
-
   public AggregationGroupByTrimmingService(@Nonnull AggregationFunction[] aggregationFunctions, int groupByTopN) {
+    Preconditions.checkArgument(groupByTopN > 0);
+
+    _aggregationFunctions = aggregationFunctions;
     _numAggregationFunctions = aggregationFunctions.length;
     _minOrders = new boolean[_numAggregationFunctions];
     for (int i = 0; i < _numAggregationFunctions; i++) {
@@ -82,6 +73,7 @@ public class AggregationGroupByTrimmingService {
    * Given a map from group key to the intermediate results for multiple aggregation functions, trim the results to
    * desired size and put them into a list of maps from group key to intermediate result for each aggregation function.
    */
+  @SuppressWarnings("unchecked")
   @Nonnull
   public List<Map<String, Object>> trimIntermediateResultsMap(@Nonnull Map<String, Object[]> intermediateResultsMap) {
     List<Map<String, Object>> trimmedResults = new ArrayList<>(_numAggregationFunctions);
@@ -93,46 +85,75 @@ public class AggregationGroupByTrimmingService {
       return trimmedResults;
     }
 
+    // Trim the result only if the size of intermediateResultsMap is larger than the threshold
     if (intermediateResultsMap.size() > _trimThreshold) {
-      // Need to trim.
-
-      // Construct the priority queues.
-      @SuppressWarnings("unchecked")
-      PriorityQueue<GroupKeyResultPair>[] priorityQueues = new PriorityQueue[_numAggregationFunctions];
-      Object[] sampleResults = intermediateResultsMap.values().iterator().next();
+      // Construct the sorters
+      // For comparable intermediate result, use PriorityQueue as the sorter
+      // For incomparable intermediate result, use TreeMapBasedSorter as the sorter
+      Object[] sorters = new Object[_numAggregationFunctions];
       for (int i = 0; i < _numAggregationFunctions; i++) {
-        if (sampleResults[i] instanceof Comparable) {
-          priorityQueues[i] = new PriorityQueue<>(_trimSize + 1, getGroupKeyResultPairComparator(_minOrders[i]));
+        if (_aggregationFunctions[i].isIntermediateResultComparable()) {
+          if (_minOrders[i]) {
+            sorters[i] = new PriorityQueue<GroupKeyResultPair>(_trimSize, Collections.reverseOrder());
+          } else {
+            sorters[i] = new PriorityQueue<GroupKeyResultPair>(_trimSize, new ComparableComparator());
+          }
+        } else {
+          // NOTE: reverse the comparator so that keys are ordered in descending order
+          if (_minOrders[i]) {
+            sorters[i] = new TreeMapBasedSorter(_trimSize, new ComparableComparator());
+          } else {
+            sorters[i] = new TreeMapBasedSorter(_trimSize, Collections.reverseOrder());
+          }
         }
       }
 
-      // Fill results into the priority queues.
+      // Fill results into the sorting structure
       for (Map.Entry<String, Object[]> entry : intermediateResultsMap.entrySet()) {
         String groupKey = entry.getKey();
         Object[] intermediateResults = entry.getValue();
         for (int i = 0; i < _numAggregationFunctions; i++) {
-          PriorityQueue<GroupKeyResultPair> priorityQueue = priorityQueues[i];
-          if (priorityQueue == null) {
-            trimmedResults.get(i).put(groupKey, intermediateResults[i]);
+          Object intermediateResult = intermediateResults[i];
+          if (_aggregationFunctions[i].isIntermediateResultComparable()) {
+            GroupKeyResultPair value = new GroupKeyResultPair(groupKey, (Comparable) intermediateResult);
+            addToPriorityQueue((PriorityQueue<GroupKeyResultPair>) sorters[i], value, _trimSize);
           } else {
-            GroupKeyResultPair newValue = new GroupKeyResultPair(groupKey, (Comparable) intermediateResults[i]);
-            addToPriorityQueue(priorityQueue, newValue, _trimSize);
+            Comparable finalResult = _aggregationFunctions[i].extractFinalResult(intermediateResult);
+            ImmutablePair<String, Object> value = new ImmutablePair<>(groupKey, intermediateResult);
+            ((TreeMapBasedSorter) sorters[i]).addToTreeMap(finalResult, value);
           }
         }
       }
 
       // Fill trimmed results into the maps.
       for (int i = 0; i < _numAggregationFunctions; i++) {
-        PriorityQueue<GroupKeyResultPair> priorityQueue = priorityQueues[i];
-        if (priorityQueue != null) {
+        Map<String, Object> trimmedResult = trimmedResults.get(i);
+        if (_aggregationFunctions[i].isIntermediateResultComparable()) {
+          PriorityQueue<GroupKeyResultPair> priorityQueue = (PriorityQueue<GroupKeyResultPair>) sorters[i];
           while (!priorityQueue.isEmpty()) {
             GroupKeyResultPair groupKeyResultPair = priorityQueue.poll();
-            trimmedResults.get(i).put(groupKeyResultPair._groupKey, groupKeyResultPair._result);
+            trimmedResult.put(groupKeyResultPair._groupKey, groupKeyResultPair._result);
+          }
+        } else {
+          TreeMap<Comparable, List<ImmutablePair<String, Object>>> treeMap = ((TreeMapBasedSorter) sorters[i])._treeMap;
+
+          // Track the number of results added because there could be more then trim size values inside the map
+          int numResultsAdded = 0;
+          for (List<ImmutablePair<String, Object>> groupKeyResultPairs : treeMap.values()) {
+            for (ImmutablePair<String, Object> groupKeyResultPair : groupKeyResultPairs) {
+              if (numResultsAdded != _trimSize) {
+                trimmedResult.put(groupKeyResultPair.getLeft(), groupKeyResultPair.getRight());
+                numResultsAdded++;
+              } else {
+                // This will end the outer loop because there is no extra values inside the map
+                break;
+              }
+            }
           }
         }
       }
     } else {
-      // No need to trim.
+      // Simply put results from intermediateResultsMap into trimmedResults
       for (Map.Entry<String, Object[]> entry : intermediateResultsMap.entrySet()) {
         String groupKey = entry.getKey();
         Object[] intermediateResults = entry.getValue();
@@ -161,11 +182,15 @@ public class AggregationGroupByTrimmingService {
         continue;
       }
 
-      // Construct the priority queues.
-      PriorityQueue<GroupKeyResultPair> priorityQueue =
-          new PriorityQueue<>(_groupByTopN + 1, getGroupKeyResultPairComparator(_minOrders[i]));
+      // Construct the priority queue
+      PriorityQueue<GroupKeyResultPair> priorityQueue;
+      if (_minOrders[i]) {
+        priorityQueue = new PriorityQueue<>(_groupByTopN, Collections.reverseOrder());
+      } else {
+        priorityQueue = new PriorityQueue<>(_groupByTopN, new ComparableComparator());
+      }
 
-      // Fill results into the priority queues.
+      // Fill results into the priority queue
       for (Map.Entry<String, Comparable> entry : finalResultMap.entrySet()) {
         String groupKey = entry.getKey();
         Comparable finalResult = entry.getValue();
@@ -174,11 +199,11 @@ public class AggregationGroupByTrimmingService {
         addToPriorityQueue(priorityQueue, newValue, _groupByTopN);
       }
 
-      // Fill trimmed results into the list.
+      // Fill trimmed results into the list
       while (!priorityQueue.isEmpty()) {
         GroupKeyResultPair groupKeyResultPair = priorityQueue.poll();
         GroupByResult groupByResult = new GroupByResult();
-        // Do not remove trailing empty strings.
+        // Set limit to -1 to prevent removing trailing empty strings
         String[] groupKeys = groupKeyResultPair._groupKey.split(GROUP_KEY_DELIMITER, -1);
         groupByResult.setGroup(Arrays.asList(groupKeys));
         groupByResult.setValue(AggregationFunctionUtils.formatValue(groupKeyResultPair._result));
@@ -192,26 +217,25 @@ public class AggregationGroupByTrimmingService {
   /**
    * Helper method to add a value into priority queue:
    * <ul>
-   *   <li> If the queue size is less than maxQueueSize, then the element is simply added into the priority queue. </li>
-   *   <li> If the queue size is >= maxQueueSize, then the given value is compared against the top of priority queue.
-   *        If value is 'better' than the top, then it is inserted into the queue, and the top element is removed,
-   *        to keep the size of the queue bounded. </li>
-   *   <li> If max queue size is <= 0, then simply returns. Caller is responsible for ensuring a valid value of
-   *        max queue size is provided. </li>
+   *   <li>
+   *     If the queue size is less than maxQueueSize, simply add the value into the priority queue.
+   *   </li>
+   *   <li>
+   *     If the queue size is equal to maxQueueSize, compare the given value against the min value of priority queue. If
+   *     the new value is greater than the min value, remove the min value and insert the new value to keep the size of
+   *     the queue bounded.
+   *   </li>
    * </ul>
-   * @param priorityQueue Priority queue into which the element needs to be inserted.
-   * @param value Value to be inserted.
-   * @param maxQueueSize Max allowed queue size.
+   *
+   * @param priorityQueue Priority queue
+   * @param value Value to be inserted
+   * @param maxQueueSize Max allowed queue size
    */
-  private void addToPriorityQueue(PriorityQueue<GroupKeyResultPair> priorityQueue, GroupKeyResultPair value, int maxQueueSize) {
-    // If maxQueueSize is zero, then simply return. Caller should check the validity of maxQueueSize.
-    if (maxQueueSize <= 0) {
-      return;
-    }
-
-    if (priorityQueue.size() >= maxQueueSize) {
-      GroupKeyResultPair topValue = priorityQueue.peek();
-      if (priorityQueue.comparator().compare(topValue, value) < 0) {
+  private static void addToPriorityQueue(PriorityQueue<GroupKeyResultPair> priorityQueue, GroupKeyResultPair value,
+      int maxQueueSize) {
+    if (priorityQueue.size() == maxQueueSize) {
+      GroupKeyResultPair minValue = priorityQueue.peek();
+      if (priorityQueue.comparator().compare(value, minValue) > 0) {
         priorityQueue.poll();
         priorityQueue.add(value);
       }
@@ -220,33 +244,78 @@ public class AggregationGroupByTrimmingService {
     }
   }
 
-  private static class GroupKeyResultPair {
-    public String _groupKey;
-    public Comparable _result;
+  private static class GroupKeyResultPair implements Comparable<GroupKeyResultPair> {
+    private String _groupKey;
+    private Comparable _result;
 
     public GroupKeyResultPair(@Nonnull String groupKey, @Nonnull Comparable result) {
       _groupKey = groupKey;
       _result = result;
     }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public int compareTo(@Nonnull GroupKeyResultPair o) {
+      return _result.compareTo(o._result);
+    }
   }
 
-  private static Comparator<GroupKeyResultPair> getGroupKeyResultPairComparator(boolean minOrder) {
-    if (minOrder) {
-      return new Comparator<GroupKeyResultPair>() {
-        @SuppressWarnings("unchecked")
-        @Override
-        public int compare(GroupKeyResultPair o1, GroupKeyResultPair o2) {
-          return o2._result.compareTo(o1._result);
+  /**
+   * Helper class based on tree map to sort on given key-value pairs:
+   * <ul>
+   *   <li>
+   *     The value of the map is a list of values that inserted with the same key.
+   *   </li>
+   *   <li>
+   *     If the number values added is greater or equal to trim size, compare the given key against the min key of tree
+   *     map. If the new key is greater than the min key, add the value into the map.
+   *   </li>
+   *   <li>
+   *     When possible, remove the min key-values pair from map when enough values added.
+   *   </li>
+   * </ul>
+   */
+  private static class TreeMapBasedSorter {
+    private final int _trimSize;
+    private final Comparator<? super Comparable> _comparator;
+    private final TreeMap<Comparable, List<ImmutablePair<String, Object>>> _treeMap;
+    private int _numValuesAdded;
+
+    public TreeMapBasedSorter(int trimSize, Comparator<? super Comparable> comparator) {
+      _trimSize = trimSize;
+      _comparator = comparator;
+      _treeMap = new TreeMap<>(comparator);
+    }
+
+    public void addToTreeMap(Comparable key, ImmutablePair<String, Object> value) {
+      List<ImmutablePair<String, Object>> values = _treeMap.get(key);
+      if (_numValuesAdded >= _trimSize) {
+        // Check whether the value should be added
+        Map.Entry<Comparable, List<ImmutablePair<String, Object>>> lastEntry = _treeMap.lastEntry();
+        Comparable minKey = lastEntry.getKey();
+        if (_comparator.compare(key, minKey) < 0) {
+          // Add the value into the list of values
+          if (values == null) {
+            values = new ArrayList<>();
+            _treeMap.put(key, values);
+          }
+          values.add(value);
+          _numValuesAdded++;
+
+          // Check if the last key can be removed
+          if (lastEntry.getValue().size() + _trimSize == _numValuesAdded) {
+            _treeMap.remove(minKey);
+          }
         }
-      };
-    } else {
-      return new Comparator<GroupKeyResultPair>() {
-        @SuppressWarnings("unchecked")
-        @Override
-        public int compare(GroupKeyResultPair o1, GroupKeyResultPair o2) {
-          return o1._result.compareTo(o2._result);
+      } else {
+        // Value should be added
+        if (values == null) {
+          values = new ArrayList<>();
+          _treeMap.put(key, values);
         }
-      };
+        values.add(value);
+        _numValuesAdded++;
+      }
     }
   }
 }

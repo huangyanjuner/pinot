@@ -39,11 +39,10 @@ import org.slf4j.LoggerFactory;
  * Priority queues of scheduler groups that determines query priority based on tokens
  *
  * This is a multi-level query scheduling queue with each sublevel maintaining a waitlist of
- * queries for the group. The priority between groups is determined based on the available
- * number of tokens. If two groups have same number of tokens then the group with lower
+ * queries for the group. The priority between groups is provided by specific SchedulerGroup
+ * implementation. If two groups have the same priority then the group with lower
  * resource utilization is selected first. Oldest query from the winning SchedulerGroup
  * is selected for execution.
- *
  */
 public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
 
@@ -165,8 +164,8 @@ public class MultiLevelPriorityQueue implements SchedulerPriorityQueue {
       // Preconditions:
       // a. currentGroupResources <= hardLimit
       // b. selectedGroupResources <= hardLimit
-      // We prefer group with higher tokens but with resource limits.
-      // If current groupTokens are greater than currentWinningTokens then we choose current
+      // We prefer group with higher priority but with resource limits.
+      // If current group priority are greater than currently winning priority then we choose current
       // group over currentWinnerGroup if
       // a. current group is using less than softLimit resources
       // b. if softLimit < currentGroupResources <= hardLimit then

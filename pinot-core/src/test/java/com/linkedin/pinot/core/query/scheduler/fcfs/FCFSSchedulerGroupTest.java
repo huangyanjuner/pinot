@@ -24,13 +24,13 @@ import static com.linkedin.pinot.core.query.scheduler.TestHelper.*;
 import static org.testng.Assert.*;
 
 
-public class FCFSGroupTest {
+public class FCFSSchedulerGroupTest {
   static final ServerMetrics metrics = new ServerMetrics(new MetricsRegistry());
 
   @Test
   public void testCompare() {
-    FCFSGroup lhs = new FCFSGroup("one");
-    FCFSGroup rhs = new FCFSGroup("two");
+    FCFSSchedulerGroup lhs = new FCFSSchedulerGroup("one");
+    FCFSSchedulerGroup rhs = new FCFSSchedulerGroup("two");
 
     // both groups are empty
     assertNull(lhs.peekFirst());

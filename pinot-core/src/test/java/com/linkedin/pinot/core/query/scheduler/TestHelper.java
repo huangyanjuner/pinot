@@ -21,6 +21,7 @@ import com.linkedin.pinot.common.request.BrokerRequest;
 import com.linkedin.pinot.common.request.InstanceRequest;
 import com.linkedin.pinot.common.request.QuerySource;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +41,9 @@ public class TestHelper {
     br.setQuerySource(qs);
     request.setQuery(br);
     ServerQueryRequest qr = new ServerQueryRequest(request, metrics);
-    qr.getTimerContext().setQueryArrivalTimeNs(System.currentTimeMillis()* 1000 * 1000);
+    qr.getTimerContext().setQueryArrivalTimeNs(
+        TimeUnit.NANOSECONDS.convert(
+            System.currentTimeMillis(), TimeUnit.MILLISECONDS));
     return qr;
   }
 

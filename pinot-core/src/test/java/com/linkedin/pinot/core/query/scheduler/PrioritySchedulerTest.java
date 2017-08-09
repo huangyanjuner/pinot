@@ -128,8 +128,6 @@ public class PrioritySchedulerTest {
     TestSchedulerGroup group = TestPriorityScheduler.groupFactory.groupMap.get("1");
     assertEquals(group.numRunning(), 1);
     assertEquals(group.getThreadsInUse(), 1);
-    // this is odd...the runner thread count does not apply towards totalReservedThreads but
-    // accounts towards getThreadsInUse
     assertEquals(group.totalReservedThreads(), 2 /* equals numSegments in request*/);
     validationBarrier.await();
     byte[] resultData = result.get();

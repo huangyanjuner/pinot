@@ -22,9 +22,9 @@ import com.linkedin.pinot.core.query.scheduler.SchedulerQueryContext;
 import javax.annotation.Nonnull;
 
 
-public class FCFSGroup extends AbstractSchedulerGroup {
+public class FCFSSchedulerGroup extends AbstractSchedulerGroup {
 
-  public FCFSGroup(@Nonnull String group) {
+  public FCFSSchedulerGroup(@Nonnull String group) {
     super(group);
   }
 

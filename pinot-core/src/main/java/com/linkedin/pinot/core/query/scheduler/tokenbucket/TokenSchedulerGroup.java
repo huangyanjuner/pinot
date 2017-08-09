@@ -20,7 +20,7 @@ import com.google.common.base.Preconditions;
 import com.linkedin.pinot.core.query.scheduler.AbstractSchedulerGroup;
 import com.linkedin.pinot.core.query.scheduler.SchedulerGroup;
 import com.linkedin.pinot.core.query.scheduler.SchedulerGroupAccountant;
-import com.linkedin.pinot.core.query.scheduler.fcfs.FCFSGroup;
+import com.linkedin.pinot.core.query.scheduler.fcfs.FCFSSchedulerGroup;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -35,7 +35,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * time quantum penalizing heavy users. This is important to give fair chance to low qps
  * workloads.
  */
-public class SchedulerTokenGroup extends AbstractSchedulerGroup {
+public class TokenSchedulerGroup extends AbstractSchedulerGroup {
 
   // Lifetime for which allotted token in valid. Effectively, new tokens are allotted at this frequency
   private final int tokenLifetimeMs;
@@ -63,7 +63,7 @@ public class SchedulerTokenGroup extends AbstractSchedulerGroup {
   private static final double ALPHA = 0.80;
 
 
-  SchedulerTokenGroup(String schedGroupName, int numTokensPerMs, int tokenLifetimeMs) {
+  TokenSchedulerGroup(String schedGroupName, int numTokensPerMs, int tokenLifetimeMs) {
     super(schedGroupName);
     Preconditions.checkArgument(numTokensPerMs > 0);
     Preconditions.checkArgument(tokenLifetimeMs > 0);
@@ -125,14 +125,14 @@ public class SchedulerTokenGroup extends AbstractSchedulerGroup {
     }
 
     int leftTokens = getAvailableTokens();
-    int rightTokens = ((SchedulerTokenGroup) rhs).getAvailableTokens();
+    int rightTokens = ((TokenSchedulerGroup) rhs).getAvailableTokens();
     if (leftTokens > rightTokens) {
       return 1;
     }
     if (leftTokens < rightTokens) {
       return -1;
     }
-    return FCFSGroup.compareTo(this, (SchedulerGroup)rhs);
+    return FCFSSchedulerGroup.compareTo(this, (SchedulerGroup)rhs);
   }
 
   public String toString() {

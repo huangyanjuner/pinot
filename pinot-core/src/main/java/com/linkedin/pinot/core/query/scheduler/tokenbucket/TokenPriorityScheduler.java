@@ -49,7 +49,7 @@ public class TokenPriorityScheduler extends PriorityScheduler {
         int tokensPerMs = config.getInt(TOKENS_PER_MS_KEY, maxTokensPerMs);
         int tokenLifetimeMs = config.getInt(TOKEN_LIFETIME_MS_KEY, DEFAULT_TOKEN_LIFETIME_MS);
 
-        return new SchedulerTokenGroup(groupName, tokensPerMs, tokenLifetimeMs);
+        return new TokenSchedulerGroup(groupName, tokensPerMs, tokenLifetimeMs);
       }
     };
 

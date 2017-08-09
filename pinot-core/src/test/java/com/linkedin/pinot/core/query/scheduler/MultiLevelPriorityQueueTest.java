@@ -56,7 +56,8 @@ public class MultiLevelPriorityQueueTest {
   @Test
   public void testSimplePutTake() throws OutOfCapacityError {
     MultiLevelPriorityQueue queue = createQueue();
-
+    // NOTE: Timing matters here...running through debugger for
+    // over 30 seconds can cause the query to expire
     queue.put(createQueryRequest(groupOne, metrics));
     queue.put(createQueryRequest(groupTwo, metrics));
     queue.put(createQueryRequest(groupOne, metrics));
@@ -70,7 +71,7 @@ public class MultiLevelPriorityQueueTest {
     assertEquals(r.getSchedulerGroup().name(), groupTwo);
   }
 
-  @Test (expectedExceptions = OutOfCapacityError.class)
+  @Test
   public void testPutOutOfCapacity() throws OutOfCapacityError {
     PropertiesConfiguration conf = new PropertiesConfiguration();
     conf.setProperty(MultiLevelPriorityQueue.MAX_PENDING_PER_GROUP_KEY, 2);
@@ -84,7 +85,13 @@ public class MultiLevelPriorityQueueTest {
     // throwing exception
     assertTrue(true);
     // it should throw now
-    queue.put(createQueryRequest(groupOne, metrics));
+    try {
+      queue.put(createQueryRequest(groupOne, metrics));
+    } catch (OutOfCapacityError e) {
+      assertTrue(true);
+      return;
+    }
+    assertTrue(false);
   }
 
   @Test
@@ -194,6 +201,7 @@ public class MultiLevelPriorityQueueTest {
 
   private MultiLevelPriorityQueue createQueue() {
     PropertiesConfiguration conf = new PropertiesConfiguration();
+    conf.setProperty(MultiLevelPriorityQueue.QUERY_DEADLINE_SECONDS_KEY, 100000);
     return createQueue(conf, new UnboundedResourceManager(conf));
   }
 

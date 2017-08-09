@@ -38,6 +38,7 @@ public class QueryException {
   public static final int SEGMENT_PLAN_EXECUTION_ERROR_CODE = 160;
   public static final int COMBINE_SEGMENT_PLAN_TIMEOUT_ERROR_CODE = 170;
   public static final int QUERY_EXECUTION_ERROR_CODE = 200;
+  // TODO: Handle these errors in broker
   public static final int SERVER_SHUTTING_DOWN_ERROR_CODE = 210;
   public static final int SERVER_OUT_OF_CAPACITY_ERROR_CODE = 211;
   public static final int EXECUTION_TIMEOUT_ERROR_CODE = 250;

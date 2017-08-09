@@ -18,7 +18,11 @@ package com.linkedin.pinot.core.query.scheduler;
 /**
  * Scheduler group is a sub-queue in multi-level scheduling queues.
  * This class maintains context information for each of the scheduling
- * queues.
+ * queues. Each SchedulerGroup is a queue of requests and related accounting.
+ * A query request is mapped to a scheduler group. This mapping can be based on
+ * tableName, tenantName or it can be completely configuration driven which allows
+ * mapping a group of tables to a specific group. For example, a set of tables
+ * with low QPS can be mapped to a single scheduler group.
  */
 public interface SchedulerGroup extends SchedulerGroupAccountant {
   /**

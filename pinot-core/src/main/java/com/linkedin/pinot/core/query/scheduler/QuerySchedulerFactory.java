@@ -36,6 +36,8 @@ import org.slf4j.LoggerFactory;
 public class QuerySchedulerFactory {
   private static final String FCFS_ALGORITHM = "fcfs";
   private static final String DEFAULT_QUERY_SCHEDULER_ALGORITHM = FCFS_ALGORITHM;
+  public static final String TOKEN_BUCKET_ALGORITHM = "tokenbucket";
+  public static final String BOUNDED_FCFS_ALGORITHM = "bounded_fcfs";
   public static final String ALGORITHM_NAME_CONFIG_KEY = "name";
   private static Logger LOGGER = LoggerFactory.getLogger(QuerySchedulerFactory.class);
 
@@ -57,10 +59,10 @@ public class QuerySchedulerFactory {
     if (schedulerName.equals(FCFS_ALGORITHM)) {
       LOGGER.info("Using FCFS query scheduler");
       return new FCFSQueryScheduler(schedulerConfig, queryExecutor, serverMetrics);
-    } else if (schedulerName.equals("tokenbucket")) {
+    } else if (schedulerName.equals(TOKEN_BUCKET_ALGORITHM)) {
       LOGGER.info("Using Priority Token Bucket scheduler");
       return TokenPriorityScheduler.create(schedulerConfig, queryExecutor, serverMetrics);
-    } else if (schedulerConfig.equals("bounded_fcfs")) {
+    } else if (schedulerConfig.equals(BOUNDED_FCFS_ALGORITHM)) {
       return BoundedFCFSScheduler.create(schedulerConfig, queryExecutor, serverMetrics);
     }
 

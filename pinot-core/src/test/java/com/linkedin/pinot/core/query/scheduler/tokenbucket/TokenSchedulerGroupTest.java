@@ -20,13 +20,13 @@ import org.testng.annotations.Test;
 import static org.testng.Assert.*;
 
 
-public class SchedulerTokenGroupTest {
+public class TokenSchedulerGroupTest {
 
   int timeMillis = 100;
-  class TestTokenGroup extends SchedulerTokenGroup {
+  class TestTokenSchedulerGroup extends TokenSchedulerGroup {
     static final int numTokensPerMs = 100;
     static final int tokenLifetimeMs = 100;
-    TestTokenGroup() {
+    TestTokenSchedulerGroup() {
       super("testGroup", numTokensPerMs, tokenLifetimeMs);
     }
 
@@ -39,17 +39,17 @@ public class SchedulerTokenGroupTest {
   public void testIncrementThreads() throws Exception {
     // set test time first
     timeMillis = 100;
-    TestTokenGroup group = new TestTokenGroup();
+    TestTokenSchedulerGroup group = new TestTokenSchedulerGroup();
 
     int availableTokens = group.getAvailableTokens();
     // verify token count is correctly set
-    assertEquals(availableTokens, TestTokenGroup.numTokensPerMs * TestTokenGroup.tokenLifetimeMs);
+    assertEquals(availableTokens, TestTokenSchedulerGroup.numTokensPerMs * TestTokenSchedulerGroup.tokenLifetimeMs);
 
     // no threads in use...incrementing time has no effect
-    timeMillis += 2 * TestTokenGroup.tokenLifetimeMs;
+    timeMillis += 2 * TestTokenSchedulerGroup.tokenLifetimeMs;
     availableTokens = group.getAvailableTokens();
     int startTime = timeMillis;
-    assertEquals(availableTokens, TestTokenGroup.numTokensPerMs * TestTokenGroup.tokenLifetimeMs);
+    assertEquals(availableTokens, TestTokenSchedulerGroup.numTokensPerMs * TestTokenSchedulerGroup.tokenLifetimeMs);
 
     int nThreads = 1;
     incrementThreads(group, nThreads);
@@ -89,24 +89,24 @@ public class SchedulerTokenGroupTest {
 
     // 3 threads still in use. Advance time beyond time quantum
     availableTokens = group.getAvailableTokens();
-    int pendingTimeInQuantum = startTime + TestTokenGroup.tokenLifetimeMs - timeMillis;
-    timeMillis = startTime + TestTokenGroup.tokenLifetimeMs + timeIncrement;
+    int pendingTimeInQuantum = startTime + TestTokenSchedulerGroup.tokenLifetimeMs - timeMillis;
+    timeMillis = startTime + TestTokenSchedulerGroup.tokenLifetimeMs + timeIncrement;
     int timeAdvance = pendingTimeInQuantum + timeIncrement;
     // these are "roughly" the tokens in use since we apply decay. So we don't test for exact value
-    int expectedTokens = TestTokenGroup.numTokensPerMs * TestTokenGroup.tokenLifetimeMs - timeAdvance * nThreads;
+    int expectedTokens = TestTokenSchedulerGroup.numTokensPerMs * TestTokenSchedulerGroup.tokenLifetimeMs - timeAdvance * nThreads;
     assertTrue(group.getAvailableTokens() < expectedTokens);
     availableTokens = group.getAvailableTokens();
 
     // increment by multiple quantums
-    timeMillis = startTime + 3 * TestTokenGroup.tokenLifetimeMs + timeIncrement;
-    expectedTokens = TestTokenGroup.numTokensPerMs * TestTokenGroup.tokenLifetimeMs - timeIncrement * nThreads;
+    timeMillis = startTime + 3 * TestTokenSchedulerGroup.tokenLifetimeMs + timeIncrement;
+    expectedTokens = TestTokenSchedulerGroup.numTokensPerMs * TestTokenSchedulerGroup.tokenLifetimeMs - timeIncrement * nThreads;
     assertTrue(group.getAvailableTokens() < expectedTokens );
   }
 
   @Test
   public void testStartStopQuery() {
     timeMillis = 100;
-    TestTokenGroup group = new TestTokenGroup();
+    TestTokenSchedulerGroup group = new TestTokenSchedulerGroup();
     assertEquals(group.numRunning(), 0);
     assertEquals(group.numPending(), 0);
     assertEquals(group.getThreadsInUse(), 0);
@@ -119,13 +119,13 @@ public class SchedulerTokenGroupTest {
     assertEquals(group.getThreadsInUse(), 0);
   }
 
-  private void incrementThreads(SchedulerTokenGroup group, int nThreads) {
+  private void incrementThreads(TokenSchedulerGroup group, int nThreads) {
     for (int i = 0; i < nThreads; i++) {
       group.incrementThreads();
     }
   }
 
-  private void decrementThreads(SchedulerTokenGroup group, int nThreads) {
+  private void decrementThreads(TokenSchedulerGroup group, int nThreads) {
     for (int i = 0; i < nThreads; i++) {
       group.decrementThreads();
     }

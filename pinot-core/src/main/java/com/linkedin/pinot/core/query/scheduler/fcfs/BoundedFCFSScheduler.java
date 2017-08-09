@@ -45,7 +45,7 @@ public class BoundedFCFSScheduler extends PriorityScheduler {
     final SchedulerGroupFactory groupFactory = new SchedulerGroupFactory() {
       @Override
       public SchedulerGroup create(Configuration config, String groupName) {
-        return new FCFSGroup(groupName);
+        return new FCFSSchedulerGroup(groupName);
       }
     };
     MultiLevelPriorityQueue queue = new MultiLevelPriorityQueue(config, rm, groupFactory, new TableBasedGroupMapper());
